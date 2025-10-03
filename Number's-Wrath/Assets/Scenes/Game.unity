@@ -3648,6 +3648,9 @@ MonoBehaviour:
   animator: {fileID: 0}
   animParamIsWalking: isWalking
   animParamAttackTrigger: Attack
+  jumpSFX: {fileID: 8300000, guid: 2b7a9e5aff0b26d458b9b6719311df32, type: 3}
+  hitSFX: {fileID: 8300000, guid: af4f86cb0767b6041a2d0ff080fc4b0b, type: 3}
+  deathSFX: {fileID: 8300000, guid: 31f283e265d4d3f46b5a621c42cbf7d2, type: 3}
   multiplyCount: 0
 --- !u!50 &1716194552
 Rigidbody2D:

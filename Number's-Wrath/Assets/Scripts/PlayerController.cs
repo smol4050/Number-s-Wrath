@@ -1,7 +1,7 @@
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
-using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
 public class PlayerController : MonoBehaviour
@@ -37,10 +37,15 @@ public class PlayerController : MonoBehaviour
     public Transform feetPoint;
     public float feetCheckRadius = 0.12f;
 
-    [Header("Animator (optional)")]
+    [Header("Animator")]
     public Animator animator;
     public string animParamIsWalking = "isWalking";
     public string animParamAttackTrigger = "Attack";
+
+    [Header("Player SFX")]
+    public AudioClip jumpSFX;
+    public AudioClip hitSFX;
+    public AudioClip deathSFX;
 
     [HideInInspector] public int multiplyCount = 0;
 
@@ -78,27 +83,15 @@ public class PlayerController : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetButtonDown("Jump")) TryJump();
 
-        if (Input.GetMouseButtonDown(0))
-        {
-            TryAttack();
-        }
+        if (Input.GetMouseButtonDown(0)) TryAttack();
 
         if (hasPendingReward)
         {
-            if (Input.GetKeyDown(plusKey))
-            {
-                ApplyPendingRewardAsSum();
-            }
-            else if (Input.GetKeyDown(multKey))
-            {
-                ApplyPendingRewardAsMultiply();
-            }
+            if (Input.GetKeyDown(plusKey)) ApplyPendingRewardAsSum();
+            else if (Input.GetKeyDown(multKey)) ApplyPendingRewardAsMultiply();
         }
 
-        if (Input.GetKeyDown(healKey))
-        {
-            TryHealUsingNumber();
-        }
+        if (Input.GetKeyDown(healKey)) TryHealUsingNumber();
 
         CheckGrounded();
     }
@@ -141,6 +134,9 @@ public class PlayerController : MonoBehaviour
         {
             rb.velocity = new Vector2(rb.velocity.x, 0f);
             rb.AddForce(Vector2.up * jumpForce, ForceMode2D.Impulse);
+
+            if (SoundManager.InstanceExists && jumpSFX != null)
+                SoundManager.Instance.PlaySFX(jumpSFX);
         }
     }
 
@@ -216,7 +212,8 @@ public class PlayerController : MonoBehaviour
         if (box != null)
         {
             Vector2 worldCenter = (Vector2)attackPoint.TransformPoint(box.offset);
-            Vector2 worldSize = new Vector2(box.size.x * Mathf.Abs(attackPoint.lossyScale.x), box.size.y * Mathf.Abs(attackPoint.lossyScale.y));
+            Vector2 worldSize = new Vector2(box.size.x * Mathf.Abs(attackPoint.lossyScale.x),
+                                            box.size.y * Mathf.Abs(attackPoint.lossyScale.y));
             float angle = attackPoint.eulerAngles.z;
 
             hits = Physics2D.OverlapBoxAll(worldCenter, worldSize, angle, enemyLayer.value);
@@ -241,20 +238,16 @@ public class PlayerController : MonoBehaviour
             else if (enemy.enemyNumber == currentNumber) failProb = 0.5f;
             else failProb = 1f;
 
-            float roll = UnityEngine.Random.value;
-            if (roll < failProb)
+            if (UnityEngine.Random.value >= failProb)
             {
-                Debug.Log($"Attack failed on {enemy.name} (enemyNumber {enemy.enemyNumber}, playerNumber {currentNumber})");
-                continue;
+                enemy.TakeDamage(damage, this);
+                anyHitAndDamaged = true;
             }
-
-            enemy.TakeDamage(damage, this);
-            anyHitAndDamaged = true;
         }
 
-        if (!anyHitAndDamaged)
+        if (anyHitAndDamaged && SoundManager.InstanceExists && hitSFX != null)
         {
-            Debug.Log("OnAttackHit: no enemies damaged by this attack.");
+            SoundManager.Instance.PlaySFX(hitSFX);
         }
     }
     #endregion
@@ -274,31 +267,28 @@ public class PlayerController : MonoBehaviour
     void ApplyPendingRewardAsSum()
     {
         if (!hasPendingReward) return;
-        currentNumber = currentNumber + pendingRewardNumber;
+        currentNumber += pendingRewardNumber;
         hasPendingReward = false;
         pendingRewardNumber = 0;
         GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
-        Debug.Log("Applied pending as SUM");
-
         GameUIManager.Instance?.UpdatePendingUI(false);
+        Debug.Log("Applied pending as SUM");
     }
 
     void ApplyPendingRewardAsMultiply()
     {
         if (!hasPendingReward) return;
-        currentNumber = currentNumber * pendingRewardNumber;
+        currentNumber *= pendingRewardNumber;
         multiplyCount++;
         hasPendingReward = false;
         pendingRewardNumber = 0;
         GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
-        Debug.Log("Applied pending as MULTIPLY");
-
         GameUIManager.Instance?.UpdatePendingUI(false);
+        Debug.Log("Applied pending as MULTIPLY");
     }
-
     #endregion
 
-    #region Heal logic (previously given)
+    #region Heal logic
     public bool TryHealUsingNumber()
     {
         if (currentLives >= maxLives) return false;
@@ -318,7 +308,8 @@ public class PlayerController : MonoBehaviour
             currentLives = Mathf.Clamp(currentLives + 1, 0, maxLives);
             GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
             GameUIManager.Instance?.OnPlayerTookDamage(currentLives);
-            if (SoundManager.InstanceExists) SoundManager.Instance.PlaySFX(SoundManager.Instance.testSfxClip);
+            if (SoundManager.InstanceExists && hitSFX != null)
+                SoundManager.Instance.PlaySFX(hitSFX);
             return true;
         }
         return false;
@@ -332,22 +323,11 @@ public class PlayerController : MonoBehaviour
     }
     #endregion
 
-    public bool HasPendingReward()
-    {
-        return hasPendingReward;
-    }
+    public bool HasPendingReward() => hasPendingReward;
 
-    public void ApplyPendingAsSum()
-    {
-        if (!hasPendingReward) return;
-        ApplyPendingRewardAsSum();
-    }
+    public void ApplyPendingAsSum() => ApplyPendingRewardAsSum();
+    public void ApplyPendingAsMultiply() => ApplyPendingRewardAsMultiply();
 
-    public void ApplyPendingAsMultiply()
-    {
-        if (!hasPendingReward) return;
-        ApplyPendingRewardAsMultiply();
-    }
     public void ReceiveDamage(int amount)
     {
         if (amount <= 0) return;
@@ -356,13 +336,23 @@ public class PlayerController : MonoBehaviour
         GameUIManager.Instance?.OnPlayerTookDamage(currentLives);
         Debug.Log($"Player received {amount} damage. Lives: {currentLives}/{maxLives}");
 
+        if (currentLives > 0 && SoundManager.InstanceExists && hitSFX != null)
+            SoundManager.Instance.PlaySFX(hitSFX);
+
         if (currentLives <= 0)
         {
             Debug.Log("Player died.");
-
-            SceneManager.LoadScene("MainMenu");
+            StartCoroutine(DieAndReturnToMenu());
         }
     }
 
+    IEnumerator DieAndReturnToMenu()
+    {
+        if (SoundManager.InstanceExists && deathSFX != null)
+            SoundManager.Instance.PlaySFX(deathSFX);
 
+        if (deathSFX != null) yield return new WaitForSeconds(deathSFX.length);
+
+        SceneManager.LoadScene("MainMenu");
+    }
 }
