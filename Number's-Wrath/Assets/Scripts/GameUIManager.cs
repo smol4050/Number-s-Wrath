@@ -58,22 +58,72 @@ public class GameUIManager : MonoBehaviour
 
     void RefreshLivesVisual()
     {
-        foreach (var go in heartInstances) Destroy(go);
+        if (heartPrefabContainer == null)
+        {
+            Debug.LogError("[GameUIManager] heartPrefabContainer NO asignado en inspector. Asignar heart prefab (root con child 'Fill').");
+            return;
+        }
+        if (livesContainer == null)
+        {
+            Debug.LogError("[GameUIManager] livesContainer NO asignado en inspector. Arrastra el transform del contenedor de corazones.");
+            return;
+        }
+
+#if UNITY_EDITOR
+        for (int i = livesContainer.childCount - 1; i >= 0; i--)
+            DestroyImmediate(livesContainer.GetChild(i).gameObject);
+#else
+    foreach (Transform t in livesContainer) Destroy(t.gameObject);
+#endif
         heartInstances.Clear();
-        
+
         for (int i = 0; i < maxLives; i++)
         {
-            GameObject go = Instantiate(heartPrefabContainer, livesContainer);
-            go.SetActive(true);
-            
+            GameObject go = Instantiate(heartPrefabContainer, livesContainer, false);
+            go.name = $"Heart_{i}";
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt != null) rt.localScale = Vector3.one;
+            else go.transform.localScale = Vector3.one;
+
             Transform fill = go.transform.Find("Fill");
+            if (fill == null)
+            {
+                foreach (Transform c in go.transform)
+                {
+                    if (c.name.ToLower().Contains("fill"))
+                    {
+                        fill = c;
+                        break;
+                    }
+                }
+            }
+
             if (fill != null)
             {
-                fill.gameObject.SetActive(i < currentLives);
+                bool filled = i < currentLives;
+                fill.gameObject.SetActive(filled);
             }
+            else
+            {
+                var imgRoot = go.GetComponent<UnityEngine.UI.Image>();
+                if (imgRoot != null)
+                {
+                    imgRoot.enabled = (i < currentLives);
+                    Debug.LogWarning($"[GameUIManager] heart prefab sin child 'Fill' — usando Image del root como fallback. {go.name}");
+                }
+                else
+                {
+                    Debug.LogError($"[GameUIManager] No pude encontrar hijo 'Fill' ni Image en el prefab de heart ({go.name}). Revisa el prefab.");
+                }
+            }
+
             heartInstances.Add(go);
         }
+
+        Canvas.ForceUpdateCanvases();
     }
+
 
     public void UpdatePowerNumber(long num)
     {

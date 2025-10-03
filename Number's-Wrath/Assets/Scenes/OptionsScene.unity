@@ -1066,7 +1066,7 @@ MonoBehaviour:
   musicSlider: {fileID: 1153624196}
   sfxSlider: {fileID: 1264653875}
   backButton: {fileID: 149493802}
-  menuSceneName: Menu
+  menuSceneName: MainMenu
   demoSfxClip: {fileID: 0}
 --- !u!1 &1111501984
 GameObject:

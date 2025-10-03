@@ -3,8 +3,8 @@ using UnityEngine.UI;
 
 public class UIControlButton : MonoBehaviour
 {
-    public string operation = "plus"; // "plus" o "mult"
-    public AudioClip overrideClickClip; // opcional
+    public string operation = "plus";
+    public AudioClip overrideClickClip;
     Button btn;
     Image img;
 
