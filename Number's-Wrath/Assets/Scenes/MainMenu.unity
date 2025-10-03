@@ -338,7 +338,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a8fe4f19c0c6c7f4eaa32dcc9173bce6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  defaultMusicClip: {fileID: 8300000, guid: e5b41ce86339f7047ba421ea871a808f, type: 3}
+  defaultMusicClip: {fileID: 8300000, guid: d6151be0ebc8bdb4ab228c9e597443cf, type: 3}
   clickClip: {fileID: 8300000, guid: 151b37d9a8e1f2a409ba52e3ab4ccc5a, type: 3}
   testSfxClip: {fileID: 8300000, guid: 151b37d9a8e1f2a409ba52e3ab4ccc5a, type: 3}
   defaultMusicVolume: 0.6
