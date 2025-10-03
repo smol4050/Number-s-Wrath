@@ -13,6 +13,7 @@ public class PlayerController : MonoBehaviour
     public int maxLives = 3;
     public int initialLives = 3;
     int currentLives;
+    public int CurrentLives => currentLives;
 
     [Header("Weapon")]
     public SwordSwing swordSwing;
