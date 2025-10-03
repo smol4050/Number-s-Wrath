@@ -1,3 +1,4 @@
+using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -12,6 +13,9 @@ public class PlayerController : MonoBehaviour
     public int maxLives = 3;
     public int initialLives = 3;
     int currentLives;
+
+    [Header("Weapon")]
+    public SwordSwing swordSwing;
 
     [Header("Combat")]
     public Transform attackPoint;
@@ -33,7 +37,7 @@ public class PlayerController : MonoBehaviour
     public Transform feetPoint;
     public float feetCheckRadius = 0.12f;
 
-    [Header("Animator")]
+    [Header("Animator (optional)")]
     public Animator animator;
     public string animParamIsWalking = "isWalking";
     public string animParamAttackTrigger = "Attack";
@@ -59,6 +63,8 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         col = GetComponent<Collider2D>();
+
+        facingRight = transform.localScale.x >= 0f;
 
         currentLives = Mathf.Clamp(initialLives, 0, maxLives);
         GameUIManager.Instance?.SetMaxLives(maxLives, currentLives);
@@ -107,6 +113,7 @@ public class PlayerController : MonoBehaviour
     {
         float vx = input * moveSpeed;
         rb.velocity = new Vector2(vx, rb.velocity.y);
+
         if (input > 0 && !facingRight) Flip();
         else if (input < 0 && facingRight) Flip();
     }
@@ -170,16 +177,58 @@ public class PlayerController : MonoBehaviour
 
         if (animator != null) animator.SetTrigger(animParamAttackTrigger);
 
-        yield return new WaitForSeconds(attackDelay);
+        if (swordSwing != null)
+        {
+            swordSwing.DoSwing(facingRight);
 
-        long damage = System.Math.Max(1, currentNumber / 2);
+            float angleDiff = Mathf.Abs(swordSwing.swingAngle - swordSwing.baseAngle);
+            float speed = Mathf.Max(0.0001f, swordSwing.swingSpeed);
+            float timeToTarget = angleDiff / speed;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll((Vector2)attackPoint.position, attackRange, enemyLayer.value);
+            yield return new WaitForSeconds(timeToTarget);
+
+            OnAttackHit();
+        }
+        else
+        {
+            yield return new WaitForSeconds(attackDelay);
+            OnAttackHit();
+        }
+
+        yield return new WaitForSeconds(attackCooldown);
+        canAttack = true;
+    }
+
+    public void OnAttackHit()
+    {
+        if (attackPoint == null)
+        {
+            Debug.LogWarning("[PlayerController] OnAttackHit: attackPoint no asignado.");
+            return;
+        }
+
+        long damage = Math.Max(1, currentNumber / 2);
         bool anyHitAndDamaged = false;
 
-        if (hits.Length == 0)
+        BoxCollider2D box = attackPoint.GetComponent<BoxCollider2D>();
+        Collider2D[] hits = null;
+
+        if (box != null)
         {
-            Debug.Log("Attack: no enemies in range.");
+            Vector2 worldCenter = (Vector2)attackPoint.TransformPoint(box.offset);
+            Vector2 worldSize = new Vector2(box.size.x * Mathf.Abs(attackPoint.lossyScale.x), box.size.y * Mathf.Abs(attackPoint.lossyScale.y));
+            float angle = attackPoint.eulerAngles.z;
+
+            hits = Physics2D.OverlapBoxAll(worldCenter, worldSize, angle, enemyLayer.value);
+        }
+        else
+        {
+            hits = Physics2D.OverlapCircleAll(attackPoint.position, attackRange, enemyLayer.value);
+        }
+
+        if (hits == null || hits.Length == 0)
+        {
+            Debug.Log("OnAttackHit: no enemies in range.");
         }
 
         foreach (var hit in hits)
@@ -187,12 +236,12 @@ public class PlayerController : MonoBehaviour
             Enemy enemy = hit.GetComponent<Enemy>();
             if (enemy == null) continue;
 
-            float failProb = 0f;
+            float failProb;
             if (enemy.enemyNumber < currentNumber) failProb = 0f;
             else if (enemy.enemyNumber == currentNumber) failProb = 0.5f;
-            else if (enemy.enemyNumber > currentNumber) failProb = 1f;
+            else failProb = 1f;
 
-            float roll = UnityEngine.Random.value; // 0..1
+            float roll = UnityEngine.Random.value;
             if (roll < failProb)
             {
                 Debug.Log($"Attack failed on {enemy.name} (enemyNumber {enemy.enemyNumber}, playerNumber {currentNumber})");
@@ -205,19 +254,7 @@ public class PlayerController : MonoBehaviour
 
         if (!anyHitAndDamaged)
         {
-            Debug.Log("Attack: no enemies damaged by this attack.");
-        }
-
-        yield return new WaitForSeconds(attackCooldown);
-        canAttack = true;
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        if (attackPoint != null)
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(attackPoint.position, attackRange);
+            Debug.Log("OnAttackHit: no enemies damaged by this attack.");
         }
     }
     #endregion
@@ -233,7 +270,6 @@ public class PlayerController : MonoBehaviour
 
         GameUIManager.Instance?.UpdatePendingUI(true);
     }
-
 
     void ApplyPendingRewardAsSum()
     {
@@ -312,5 +348,21 @@ public class PlayerController : MonoBehaviour
         if (!hasPendingReward) return;
         ApplyPendingRewardAsMultiply();
     }
+    public void ReceiveDamage(int amount)
+    {
+        if (amount <= 0) return;
+
+        currentLives = Mathf.Clamp(currentLives - amount, 0, maxLives);
+        GameUIManager.Instance?.OnPlayerTookDamage(currentLives);
+        Debug.Log($"Player received {amount} damage. Lives: {currentLives}/{maxLives}");
+
+        if (currentLives <= 0)
+        {
+            Debug.Log("Player died.");
+
+            SceneManager.LoadScene("MainMenu");
+        }
+    }
+
 
 }

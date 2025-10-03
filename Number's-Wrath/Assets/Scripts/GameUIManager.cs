@@ -13,7 +13,7 @@ public class GameUIManager : MonoBehaviour
     public Transform livesContainer;
     public Text powerNumberText;
     public float numberPulseDuration = 0.36f;
-    public float numberPulseScale = 1.18f;
+    public float numberPulseScale = 0.18f;
 
     [Header("Top Right - Kills")]
     public Text killsText;
@@ -27,6 +27,7 @@ public class GameUIManager : MonoBehaviour
     public UIControlButton plusButtonControl;
     [Tooltip("Referencia al componente UIControlButton que controla el botón ×")]
     public UIControlButton multButtonControl;
+    
 
     int currentLives = 3;
     int maxLives = 3;
@@ -39,6 +40,12 @@ public class GameUIManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
+
+        if (plusButtonControl == null && plusButtonImage != null)
+            plusButtonControl = plusButtonImage.GetComponent<UIControlButton>();
+
+        if (multButtonControl == null && multButtonImage != null)
+            multButtonControl = multButtonImage.GetComponent<UIControlButton>();
     }
 
     void Start()

@@ -16,14 +16,15 @@ public class UIControlButton : MonoBehaviour
     {
         btn = GetComponent<Button>();
         img = GetComponent<Image>();
-        if (btn != null)
-            btn.onClick.AddListener(OnClicked);
+        if (btn != null) btn.onClick.AddListener(OnClicked);
+
+        if (img != null)
+            img.color = Color.black;
     }
 
     void OnDestroy()
     {
-        if (btn != null)
-            btn.onClick.RemoveListener(OnClicked);
+        if (btn != null) btn.onClick.RemoveListener(OnClicked);
     }
 
     void OnClicked()
@@ -31,61 +32,37 @@ public class UIControlButton : MonoBehaviour
         DoAction();
     }
 
-    
     public void DoAction()
     {
         var player = PlayerController.Instance;
-        if (player == null)
-        {
-            Debug.LogWarning("[UIControlButton] No player instance found.");
-            return;
-        }
-
-        if (!player.HasPendingReward())
-        {
-            Debug.Log($"UIControlButton: No pending reward — '{operation}' ignored.");
-            return;
-        }
+        if (player == null) return;
+        if (!player.HasPendingReward()) return;
 
         if (SoundManager.InstanceExists)
         {
-            if (overrideClickClip != null)
-                SoundManager.Instance.PlaySFX(overrideClickClip);
-            else
-                SoundManager.Instance.PlayClick();
+            if (overrideClickClip != null) SoundManager.Instance.PlaySFX(overrideClickClip);
+            else SoundManager.Instance.PlayClick();
         }
 
         if (operation == "plus")
-        {
             player.ApplyPendingAsSum();
-        }
         else if (operation == "mult" || operation == "multiply")
-        {
             player.ApplyPendingAsMultiply();
-        }
-        else
-        {
-            Debug.LogWarning($"UIControlButton: operación desconocida '{operation}'");
-        }
 
         GameUIManager.Instance?.UpdatePendingUI(false);
-
         GameUIManager.Instance?.HighlightOperation(operation);
     }
 
-    
     public void DoActionWithoutSound()
     {
         var player = PlayerController.Instance;
         if (player == null) return;
-        if (!player.HasPendingReward())
-        {
-            Debug.Log($"UIControlButton: No pending reward — '{operation}' ignored (without sound).");
-            return;
-        }
+        if (!player.HasPendingReward()) return;
 
-        if (operation == "plus") player.ApplyPendingAsSum();
-        else if (operation == "mult" || operation == "multiply") player.ApplyPendingAsMultiply();
+        if (operation == "plus")
+            player.ApplyPendingAsSum();
+        else if (operation == "mult" || operation == "multiply")
+            player.ApplyPendingAsMultiply();
 
         GameUIManager.Instance?.UpdatePendingUI(false);
         GameUIManager.Instance?.HighlightOperation(operation);
@@ -94,9 +71,9 @@ public class UIControlButton : MonoBehaviour
     public void StartBlinking()
     {
         if (isBlinking) return;
+        if (operation != "plus" && operation != "mult" && operation != "multiply") return;
+
         isBlinking = true;
-        
-        if (img != null) img.enabled = true;
         blinkRoutine = StartCoroutine(Blink());
     }
 
@@ -104,20 +81,36 @@ public class UIControlButton : MonoBehaviour
     {
         if (!isBlinking) return;
         isBlinking = false;
-        if (blinkRoutine != null) StopCoroutine(blinkRoutine);
+
+        if (blinkRoutine != null)
+            StopCoroutine(blinkRoutine);
+
         blinkRoutine = null;
-        if (img != null) img.enabled = true;
+
+        if (img != null)
+            img.color = Color.black;
     }
 
     IEnumerator Blink()
     {
-        float interval = 0.32f;
+        float duration = 1.2f;
+        float t = 0f;
+        Color colorA = Color.black;
+        Color colorB = new Color(0f, 1f, 0.098f); 
+
         while (isBlinking)
         {
             if (img != null)
-                img.enabled = !img.enabled;
-            yield return new WaitForSeconds(interval);
+            {
+                float lerp = Mathf.PingPong(t / duration, 1f);
+                img.color = Color.Lerp(colorA, colorB, lerp);
+            }
+
+            t += Time.deltaTime;
+            yield return null;
         }
-        if (img != null) img.enabled = true;
+
+        if (img != null)
+            img.color = Color.black;
     }
 }
