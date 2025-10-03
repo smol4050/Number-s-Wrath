@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
@@ -11,12 +13,18 @@ public class PlayerController : MonoBehaviour
     public int initialLives = 3;
     int currentLives;
 
-    [Header("Multiply tracking")]
-    [HideInInspector] public int multiplyCount = 0;
+    [Header("Combat")]
+    public Transform attackPoint;
+    public float attackRange = 0.9f;
+    public LayerMask enemyLayer;
+    public float attackCooldown = 0.5f;
+    public float attackDelay = 0.15f;
+    bool canAttack = true;
 
-    [Header("Heal rules")]
-    public bool applyMultiplyPenalty = true;
-    public int multiplyCountThreshold = 10;
+    [Header("Input keys")]
+    public KeyCode plusKey = KeyCode.Q;
+    public KeyCode multKey = KeyCode.E;
+    public KeyCode healKey = KeyCode.H;
 
     [Header("Movement")]
     public float moveSpeed = 6f;
@@ -25,14 +33,18 @@ public class PlayerController : MonoBehaviour
     public Transform feetPoint;
     public float feetCheckRadius = 0.12f;
 
-    [Header("Input keys")]
-    public KeyCode plusKey = KeyCode.Q;
-    public KeyCode multKey = KeyCode.E;
-    public KeyCode healKey = KeyCode.H;
+    [Header("Animator")]
+    public Animator animator;
+    public string animParamIsWalking = "isWalking";
+    public string animParamAttackTrigger = "Attack";
+
+    [HideInInspector] public int multiplyCount = 0;
+
+    long pendingRewardNumber = 0;
+    bool hasPendingReward = false;
 
     Rigidbody2D rb;
     Collider2D col;
-
     bool facingRight = true;
     bool isGrounded = false;
     float horizontalInput = 0f;
@@ -56,34 +68,30 @@ public class PlayerController : MonoBehaviour
     void Update()
     {
         horizontalInput = Input.GetAxisRaw("Horizontal");
-        if (Input.GetKeyDown(KeyCode.Space) || Input.GetButtonDown("Jump"))
+        UpdateAnimatorMovement();
+
+        if (Input.GetKeyDown(KeyCode.Space) || Input.GetButtonDown("Jump")) TryJump();
+
+        if (Input.GetMouseButtonDown(0))
         {
-            TryJump();
+            TryAttack();
         }
 
-        if (Input.GetKeyDown(plusKey))
+        if (hasPendingReward)
         {
-            OnOperationPlusPressed();
-            
-            GameUIManager.Instance?.HighlightOperation("plus");
-            
-            if (SoundManager.InstanceExists) SoundManager.Instance.PlayClick();
-        }
-
-        if (Input.GetKeyDown(multKey))
-        {
-            OnOperationMultPressed();
-            GameUIManager.Instance?.HighlightOperation("mult");
-            if (SoundManager.InstanceExists) SoundManager.Instance.PlayClick();
+            if (Input.GetKeyDown(plusKey))
+            {
+                ApplyPendingRewardAsSum();
+            }
+            else if (Input.GetKeyDown(multKey))
+            {
+                ApplyPendingRewardAsMultiply();
+            }
         }
 
         if (Input.GetKeyDown(healKey))
         {
-            bool ok = TryHealUsingNumber();
-            if (ok)
-            {
-                if (SoundManager.InstanceExists) SoundManager.Instance.PlaySFX(SoundManager.Instance.testSfxClip);
-            }
+            TryHealUsingNumber();
         }
 
         CheckGrounded();
@@ -94,11 +102,11 @@ public class PlayerController : MonoBehaviour
         MoveHorizontal(horizontalInput);
     }
 
+    #region Movement & Animations
     void MoveHorizontal(float input)
     {
         float vx = input * moveSpeed;
         rb.velocity = new Vector2(vx, rb.velocity.y);
-
         if (input > 0 && !facingRight) Flip();
         else if (input < 0 && facingRight) Flip();
     }
@@ -109,6 +117,15 @@ public class PlayerController : MonoBehaviour
         Vector3 s = transform.localScale;
         s.x *= -1;
         transform.localScale = s;
+    }
+
+    void UpdateAnimatorMovement()
+    {
+        if (animator != null)
+        {
+            bool walking = Mathf.Abs(horizontalInput) > 0.1f && isGrounded;
+            animator.SetBool(animParamIsWalking, walking);
+        }
     }
 
     void TryJump()
@@ -133,60 +150,141 @@ public class PlayerController : MonoBehaviour
             isGrounded = Physics2D.OverlapCircle(feetPoint.position, feetCheckRadius, groundLayer) != null;
         }
     }
+    #endregion
 
-    public void OnOperationPlusPressed()
+    #region Attack & Damage
+    void TryAttack()
     {
-        currentNumber += 1;
-        GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
+        if (!canAttack) return;
+        if (attackPoint == null)
+        {
+            Debug.LogWarning("[PlayerController] attackPoint no asignado.");
+            return;
+        }
+        StartCoroutine(AttackRoutine());
     }
 
-    public void OnOperationMultPressed()
+    IEnumerator AttackRoutine()
     {
-        currentNumber *= 2;
+        canAttack = false;
+
+        if (animator != null) animator.SetTrigger(animParamAttackTrigger);
+
+        yield return new WaitForSeconds(attackDelay);
+
+        long damage = System.Math.Max(1, currentNumber / 2);
+
+        Collider2D[] hits = Physics2D.OverlapCircleAll((Vector2)attackPoint.position, attackRange, enemyLayer.value);
+        bool anyHitAndDamaged = false;
+
+        if (hits.Length == 0)
+        {
+            Debug.Log("Attack: no enemies in range.");
+        }
+
+        foreach (var hit in hits)
+        {
+            Enemy enemy = hit.GetComponent<Enemy>();
+            if (enemy == null) continue;
+
+            float failProb = 0f;
+            if (enemy.enemyNumber < currentNumber) failProb = 0f;
+            else if (enemy.enemyNumber == currentNumber) failProb = 0.5f;
+            else if (enemy.enemyNumber > currentNumber) failProb = 1f;
+
+            float roll = UnityEngine.Random.value; // 0..1
+            if (roll < failProb)
+            {
+                Debug.Log($"Attack failed on {enemy.name} (enemyNumber {enemy.enemyNumber}, playerNumber {currentNumber})");
+                continue;
+            }
+
+            enemy.TakeDamage(damage, this);
+            anyHitAndDamaged = true;
+        }
+
+        if (!anyHitAndDamaged)
+        {
+            Debug.Log("Attack: no enemies damaged by this attack.");
+        }
+
+        yield return new WaitForSeconds(attackCooldown);
+        canAttack = true;
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (attackPoint != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(attackPoint.position, attackRange);
+        }
+    }
+    #endregion
+
+    #region Pending reward handling
+    public void OnEnemyDefeatedSetPending(long enemyNumber)
+    {
+        if (hasPendingReward) return;
+
+        hasPendingReward = true;
+        pendingRewardNumber = enemyNumber;
+        Debug.Log($"Pending reward set: {pendingRewardNumber}");
+
+        GameUIManager.Instance?.UpdatePendingUI(true);
+    }
+
+
+    void ApplyPendingRewardAsSum()
+    {
+        if (!hasPendingReward) return;
+        currentNumber = currentNumber + pendingRewardNumber;
+        hasPendingReward = false;
+        pendingRewardNumber = 0;
+        GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
+        Debug.Log("Applied pending as SUM");
+
+        GameUIManager.Instance?.UpdatePendingUI(false);
+    }
+
+    void ApplyPendingRewardAsMultiply()
+    {
+        if (!hasPendingReward) return;
+        currentNumber = currentNumber * pendingRewardNumber;
         multiplyCount++;
+        hasPendingReward = false;
+        pendingRewardNumber = 0;
         GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
+        Debug.Log("Applied pending as MULTIPLY");
+
+        GameUIManager.Instance?.UpdatePendingUI(false);
     }
 
-    public void TakeDamage(int dmg)
-    {
-        currentLives = Mathf.Clamp(currentLives - dmg, 0, maxLives);
-        GameUIManager.Instance?.OnPlayerTookDamage(currentLives);
-        if (currentLives <= 0) Die();
-    }
+    #endregion
 
-    void Die()
-    {
-        Debug.Log("Player died");
-    }
-
+    #region Heal logic (previously given)
     public bool TryHealUsingNumber()
     {
         if (currentLives >= maxLives) return false;
-
         int baseCost = ComputeBaseHealCost(currentLives);
         int extraCost = 0;
-
-        if (applyMultiplyPenalty && multiplyCount > multiplyCountThreshold)
+        if (multiplyCount > 10)
         {
             float halfMult = 0.5f * multiplyCount;
             float tenPercentLives = 0.1f * currentLives;
             float rawExtra = halfMult * tenPercentLives;
             extraCost = Mathf.CeilToInt(rawExtra);
         }
-
         int totalCost = Mathf.Max(1, baseCost + extraCost);
-
         if (currentNumber >= totalCost)
         {
             currentNumber -= totalCost;
             currentLives = Mathf.Clamp(currentLives + 1, 0, maxLives);
-
             GameUIManager.Instance?.OnPlayerCollectedNumber(currentNumber);
             GameUIManager.Instance?.OnPlayerTookDamage(currentLives);
-
+            if (SoundManager.InstanceExists) SoundManager.Instance.PlaySFX(SoundManager.Instance.testSfxClip);
             return true;
         }
-
         return false;
     }
 
@@ -196,11 +294,23 @@ public class PlayerController : MonoBehaviour
         if (lives >= 20) return 2;
         return 1;
     }
+    #endregion
 
-    public void PlaceAt(Vector2 worldPos)
+    public bool HasPendingReward()
     {
-        transform.position = worldPos;
-        
-        if (rb != null) rb.velocity = Vector2.zero;
+        return hasPendingReward;
     }
+
+    public void ApplyPendingAsSum()
+    {
+        if (!hasPendingReward) return;
+        ApplyPendingRewardAsSum();
+    }
+
+    public void ApplyPendingAsMultiply()
+    {
+        if (!hasPendingReward) return;
+        ApplyPendingRewardAsMultiply();
+    }
+
 }

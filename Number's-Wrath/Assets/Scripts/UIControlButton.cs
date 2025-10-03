@@ -1,12 +1,16 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public class UIControlButton : MonoBehaviour
 {
     public string operation = "plus";
     public AudioClip overrideClickClip;
+
     Button btn;
     Image img;
+    Coroutine blinkRoutine;
+    bool isBlinking = false;
 
     void Awake()
     {
@@ -27,9 +31,21 @@ public class UIControlButton : MonoBehaviour
         DoAction();
     }
 
+    
     public void DoAction()
     {
-        GameUIManager.Instance?.HighlightOperation(operation);
+        var player = PlayerController.Instance;
+        if (player == null)
+        {
+            Debug.LogWarning("[UIControlButton] No player instance found.");
+            return;
+        }
+
+        if (!player.HasPendingReward())
+        {
+            Debug.Log($"UIControlButton: No pending reward — '{operation}' ignored.");
+            return;
+        }
 
         if (SoundManager.InstanceExists)
         {
@@ -39,22 +55,69 @@ public class UIControlButton : MonoBehaviour
                 SoundManager.Instance.PlayClick();
         }
 
-        var player = PlayerController.Instance;
-        if (player != null)
+        if (operation == "plus")
         {
-            if (operation == "plus") player.OnOperationPlusPressed();
-            else if (operation == "mult") player.OnOperationMultPressed();
+            player.ApplyPendingAsSum();
         }
+        else if (operation == "mult" || operation == "multiply")
+        {
+            player.ApplyPendingAsMultiply();
+        }
+        else
+        {
+            Debug.LogWarning($"UIControlButton: operación desconocida '{operation}'");
+        }
+
+        GameUIManager.Instance?.UpdatePendingUI(false);
+
+        GameUIManager.Instance?.HighlightOperation(operation);
     }
 
+    
     public void DoActionWithoutSound()
     {
-        GameUIManager.Instance?.HighlightOperation(operation);
         var player = PlayerController.Instance;
-        if (player != null)
+        if (player == null) return;
+        if (!player.HasPendingReward())
         {
-            if (operation == "plus") player.OnOperationPlusPressed();
-            else if (operation == "mult") player.OnOperationMultPressed();
+            Debug.Log($"UIControlButton: No pending reward — '{operation}' ignored (without sound).");
+            return;
         }
+
+        if (operation == "plus") player.ApplyPendingAsSum();
+        else if (operation == "mult" || operation == "multiply") player.ApplyPendingAsMultiply();
+
+        GameUIManager.Instance?.UpdatePendingUI(false);
+        GameUIManager.Instance?.HighlightOperation(operation);
+    }
+
+    public void StartBlinking()
+    {
+        if (isBlinking) return;
+        isBlinking = true;
+        
+        if (img != null) img.enabled = true;
+        blinkRoutine = StartCoroutine(Blink());
+    }
+
+    public void StopBlinking()
+    {
+        if (!isBlinking) return;
+        isBlinking = false;
+        if (blinkRoutine != null) StopCoroutine(blinkRoutine);
+        blinkRoutine = null;
+        if (img != null) img.enabled = true;
+    }
+
+    IEnumerator Blink()
+    {
+        float interval = 0.32f;
+        while (isBlinking)
+        {
+            if (img != null)
+                img.enabled = !img.enabled;
+            yield return new WaitForSeconds(interval);
+        }
+        if (img != null) img.enabled = true;
     }
 }

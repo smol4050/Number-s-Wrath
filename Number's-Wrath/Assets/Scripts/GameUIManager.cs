@@ -18,9 +18,15 @@ public class GameUIManager : MonoBehaviour
     [Header("Top Right - Kills")]
     public Text killsText;
 
-    [Header("Bottom Right - Operations")]
+    [Header("Bottom Right - Operations (images)")]
     public Image plusButtonImage;
     public Image multButtonImage;
+
+    [Header("Bottom Right - Operations (controls)")]
+    [Tooltip("Referencia al componente UIControlButton que controla el botón +")]
+    public UIControlButton plusButtonControl;
+    [Tooltip("Referencia al componente UIControlButton que controla el botón ×")]
+    public UIControlButton multButtonControl;
 
     int currentLives = 3;
     int maxLives = 3;
@@ -73,7 +79,7 @@ public class GameUIManager : MonoBehaviour
         for (int i = livesContainer.childCount - 1; i >= 0; i--)
             DestroyImmediate(livesContainer.GetChild(i).gameObject);
 #else
-    foreach (Transform t in livesContainer) Destroy(t.gameObject);
+        foreach (Transform t in livesContainer) Destroy(t.gameObject);
 #endif
         heartInstances.Clear();
 
@@ -209,5 +215,19 @@ public class GameUIManager : MonoBehaviour
         currentLives = Mathf.Clamp(currentLives + 1, 0, maxLives);
         RefreshLivesVisual();
         return true;
+    }
+
+    public void UpdatePendingUI(bool hasPending)
+    {
+        if (hasPending)
+        {
+            if (plusButtonControl != null) plusButtonControl.StartBlinking();
+            if (multButtonControl != null) multButtonControl.StartBlinking();
+        }
+        else
+        {
+            if (plusButtonControl != null) plusButtonControl.StopBlinking();
+            if (multButtonControl != null) multButtonControl.StopBlinking();
+        }
     }
 }
